@@ -2,34 +2,48 @@ main файл:
 #include "shop.h"
 
 int main() {
-    Product *products = NULL;
-    int count = load_products(&products, "shop.bin");
-    int choice;
+    Laptop **laptops = NULL;
+    int count = 0;
+    if (!load_laptops(&laptops, &count, "laptops.bin")) {
+        fprintf(stderr, "Ошибка\n");
+        return 1;
+    }
 
+    int choice;
     do {
         printf("\nМеню:\n");
-        printf("1. Вывести товары\n");
-        printf("2. Добавить товар\n");
-        printf("3. Удалить товар\n");
-        printf("4. Редактировать товар\n");
-        printf("5. Поиск товара\n");
+        printf("1. Вывести ноутбуки\n");
+        printf("2. Добавить ноутбук\n");
+        printf("3. Удалить ноутбук\n");
+        printf("4. Редактировать ноутбук\n");
+        printf("5. Найти ноутбук\n");
         printf("0. Выход\n");
         printf("Введите номер: ");
-        scanf("%d", &choice);
+        if (scanf("%d", &choice) != 1) {
+            fprintf(stderr, "Неверно\n");
+            while (getchar() != '\n');
+            continue;
+        }
 
         switch (choice) {
-            case 1: print_products(products, count); break;
-            case 2: add_product(&products, &count); break;
-            case 3: delete_product(&products, &count); break;
-            case 4: edit_product(products, count); break;
-            case 5: search_products(products, count); break;
+            case 1: print_laptops(laptops, count); break;
+            case 2: add_laptop(&laptops, &count); break;
+            case 3: delete_laptop(&laptops, &count); break;
+            case 4: edit_laptop(laptops, count); break;
+            case 5: search_laptops(laptops, count); break;
             case 0: printf("Выход...\n"); break;
-            default: printf("Неверный выбор!\n");
+            default: printf("Неверно\n");
         }
     } while (choice != 0);
 
-    save_products(products, count, "shop.bin");
-    free(products);
+    if (!save_laptops(laptops, count, "laptops.bin")) {
+        fprintf(stderr, "Ошибка\n");
+    }
+
+    for (int i = 0; i < count; i++){
+        free(laptops[i]);
+    }
+    free(laptops);
     return 0;
 }
 
@@ -50,25 +64,32 @@ int main() {
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #define MAX_NAME 50
 #define MAX_DESC 100
+#define MAX_CPU 50
+#define MAX_RAM 20
 #define MAX_GPU 50
+#define MAX_STORAGE 20
 
 typedef struct {
     char name[MAX_NAME];
     float price;
     char description[MAX_DESC];
+    char cpu[MAX_CPU];
+    char ram[MAX_RAM];
+    char storage[MAX_STORAGE];
     char gpu[MAX_GPU];
-} Product;
+} Laptop;
 
-int load_products(Product **products, const char *filename);
-void save_products(Product *products, int count, const char *filename);
-void add_product(Product **products, int *count);
-void delete_product(Product **products, int *count);
-void edit_product(Product *products, int count);
-void search_products(Product *products, int count);
-void print_products(Product *products, int count);
+bool load_laptops(Laptop ***laptops, int *count, const char *filename);
+bool save_laptops(Laptop **laptops, int count, const char *filename);
+void add_laptop(Laptop ***laptops, int *count);
+void delete_laptop(Laptop ***laptops, int *count);
+void edit_laptop(Laptop **laptops, int count);
+void search_laptops(Laptop **laptops, int count);
+void print_laptops(Laptop **laptops, int count);
 
 #endif
 
@@ -77,130 +98,184 @@ void print_products(Product *products, int count);
 
 Функции:
 #include "shop.h"
+#include <errno.h>
 
-int load_products(Product **products, const char *filename) {
+bool load_laptops(Laptop ***laptops, int *count, const char *filename) {
     FILE *file = fopen(filename, "rb");
-    if (file == NULL) return 0;
+    if (file == NULL) return false;
 
     fseek(file, 0, SEEK_END);
     long fileSize = ftell(file);
     rewind(file);
 
-    int count = fileSize / sizeof(Product);
-    if (count <=0) {
+    *count = fileSize / sizeof(Laptop);
+    if (*count <= 0) {
         fclose(file);
-        return 0;
+        return true;
     }
 
-    *products = (Product *)malloc(count * sizeof(Product));
-    if (*products == NULL) {
+    *laptops = (Laptop **)malloc(*count * sizeof(Laptop *));
+    if (*laptops == NULL) {
+        perror("Ошибка");
         fclose(file);
-        return 0;
+        return false;
+    }
+    for (int i = 0; i < *count; ++i){
+        (*laptops)[i] = (Laptop*)malloc(sizeof(Laptop));
+        if ((*laptops)[i] == NULL){
+            perror("Ошибка");
+            for (int j = 0; j < i; ++j) free((*laptops)[j]);
+            free(*laptops);
+            fclose(file);
+            return false;
+        }
     }
 
-    fread(*products, sizeof(Product), count, file);
+    if (fread(*(*laptops), sizeof(Laptop), *count, file) != *count) {
+        perror("Ошибка");
+        for (int i = 0; i < *count; ++i) free((*laptops)[i]);
+        free(*laptops);
+        fclose(file);
+        return false;
+    }
+
     fclose(file);
-    return count;
+    return true;
 }
 
-void save_products(Product *products, int count, const char *filename) {
+bool save_laptops(Laptop **laptops, int count, const char *filename) {
     FILE *file = fopen(filename, "wb");
-    if (file != NULL) {
-        fwrite(products, sizeof(Product), count, file);
+    if (file == NULL) return false;
+
+    if (fwrite(laptops[0], sizeof(Laptop), count, file) != count) {
+        perror("Ошибка");
         fclose(file);
+        return false;
     }
+
+    fclose(file);
+    return true;
 }
 
-
-void add_product(Product **products, int *count) {
-    Product *new_products = (Product *)realloc(*products, (*count + 1) * sizeof(Product));
-    if (new_products == NULL) {
-        fprintf(stderr, "Ошибка\n");
+void add_laptop(Laptop ***laptops, int *count) {
+    Laptop **new_laptops = (Laptop **)realloc(*laptops, (*count + 1) * sizeof(Laptop *));
+    if (new_laptops == NULL) {
+        perror("Ошибка");
         return;
     }
-    *products = new_products;
-    printf("Введите название товара: ");
-    scanf(" %[^\n]", (*products)[*count].name);
+    *laptops = new_laptops;
+    (*laptops)[*count] = (Laptop*)malloc(sizeof(Laptop));
+    if ((*laptops)[*count] == NULL){
+        perror("Ошибка");
+        return;
+    }
+    printf("Введите название: ");
+    scanf(" %[^\n]", (*laptops)[*count]->name);
     printf("Введите цену: ");
-    scanf("%f", &(*products)[*count].price);
+    scanf("%f", &(*laptops)[*count]->price);
     printf("Введите описание: ");
-    scanf(" %[^\n]", (*products)[*count].description);
+    scanf(" %[^\n]", (*laptops)[*count]->description);
+    printf("Введите процессор: ");
+    scanf(" %[^\n]", (*laptops)[*count]->cpu);
+    printf("Введите оперативную память: ");
+    scanf(" %[^\n]", (*laptops)[*count]->ram);
+    printf("Введите накопитель: ");
+    scanf(" %[^\n]", (*laptops)[*count]->storage);
+    printf("Введите видеокарту: ");
+    scanf(" %[^\n]", (*laptops)[*count]->gpu);
     (*count)++;
 }
 
-void delete_product(Product **products, int *count) {
+void delete_laptop(Laptop ***laptops, int *count) {
     if (*count == 0) {
-        printf("База данных пуста!\n");
+        printf("Ничего нет в базе данных\n");
         return;
     }
     int index;
-    printf("Введите номер товара для удаления: ");
+    printf("Введите номер ноутбука для удаления (1-%d): ", *count);
     scanf("%d", &index);
     if (index < 1 || index > *count) {
-        printf("Товар не найден\n");
+        printf("неверный номер\n");
         return;
     }
+    free((*laptops)[index - 1]);
     for (int i = index - 1; i < *count - 1; i++) {
-        (*products)[i] = (*products)[i + 1];
+        (*laptops)[i] = (*laptops)[i + 1];
     }
     (*count)--;
-    *products = (Product*)realloc(*products, (*count) * sizeof(Product));
+    (*laptops) = (Laptop **)realloc(*laptops, (*count) * sizeof(Laptop *));
 }
 
-void edit_product(Product *products, int count) {
+
+void edit_laptop(Laptop **laptops, int count) {
     if (count == 0) {
-        printf("В базе данных ничего нет\n");
+        printf("Ничего нет в базе данных\n");
         return;
     }
     int index;
-    printf("Введите номер товара для редактирования: ");
+    printf("Введите номер ноутбука для редактирования (1-%d): ", count);
     scanf("%d", &index);
     if (index < 1 || index > count) {
-        printf("Товар не найден!\n");
+        printf("Неверный номер\n");
         return;
     }
     index--;
-    printf("Введите новое название товара: ");
-    scanf(" %[^\n]", products[index].name);
+    printf("Введите новое название: ");
+    scanf(" %[^\n]", laptops[index]->name);
     printf("Введите новую цену: ");
-    scanf("%f", &products[index].price);
+    scanf("%f", &laptops[index]->price);
     printf("Введите новое описание: ");
-    scanf(" %[^\n]", products[index].description);
+    scanf(" %[^\n]", laptops[index]->description);
+    printf("Введите новый процессор: ");
+    scanf(" %[^\n]", laptops[index]->cpu);
+    printf("Введите новую оперативную память: ");
+    scanf(" %[^\n]", laptops[index]->ram);
+    printf("Введите новый накопитель: ");
+    scanf(" %[^\n]", laptops[index]->storage);
+    printf("Введите новую видеокарту: ");
+    scanf(" %[^\n]", laptops[index]->gpu);
 }
 
-void search_products(Product *products, int count) {
+void search_laptops(Laptop **laptops, int count) {
     if (count == 0) {
-        printf("База данных пуста!\n");
+        printf("ничего нет в базе данных\n");
         return;
     }
     char name_keyword[MAX_NAME];
-    float min_price;
-
-    printf(": ");
+    char gpu_keyword[MAX_GPU];
+    printf("Введите ключевое слово: ");
     scanf(" %[^\n]", name_keyword);
-    printf("Введите минимальную цену: ");
-    scanf("%f", &min_price);
+    printf("Введите ключевое слово: ");
+    scanf(" %[^\n]", gpu_keyword);
 
     for (int i = 0; i < count; i++) {
-        if (strstr(products[i].name, name_keyword) != NULL && products[i].price >= min_price) {
-            printf("Товар %d:\n", i + 1);
-            printf("Название: %s\n", products[i].name);
-            printf("Цена: %.2f\n", products[i].price);
-            printf("Описание: %s\n\n", products[i].description);
+        if (strstr(laptops[i]->name, name_keyword) != NULL && strstr(laptops[i]->gpu, gpu_keyword) != NULL) {
+            printf("Ноутбук %d:\n", i + 1);
+            printf("Название: %s\n", laptops[i]->name);
+            printf("Цена: %.2f\n", laptops[i]->price);
+            printf("Описание: %s\n", laptops[i]->description);
+            printf("процессор: %s\n", laptops[i]->cpu);
+            printf("Оперативная память: %s\n", laptops[i]->ram);
+            printf("Накопитель: %s\n", laptops[i]->storage);
+            printf("Видеокарта: %s\n\n", laptops[i]->gpu);
         }
     }
 }
 
-void print_products(Product *products, int count) {
+void print_laptops(Laptop **laptops, int count) {
     if (count == 0) {
         printf("Ничего нет в базе данных\n");
         return;
     }
     for (int i = 0; i < count; i++) {
-        printf("Товар %d:\n", i + 1);
-        printf("Название: %s\n", products[i].name);
-        printf("Цена: %.2f\n", products[i].price);
-        printf("Описание: %s\n\n", products[i].description);
+        printf("Ноутбук %d:\n", i + 1);
+        printf("Название: %s\n", laptops[i]->name);
+        printf("Цена: %.2f\n", laptops[i]->price);
+        printf("Описание: %s\n", laptops[i]->description);
+        printf("Процессор: %s\n", laptops[i]->cpu);
+        printf("Оперативная память: %s\n", laptops[i]->ram);
+        printf("Накопитель: %s\n", laptops[i]->storage);
+        printf("Видеокарта: %s\n\n", laptops[i]->gpu);
     }
 }
 
@@ -212,10 +287,10 @@ Makefile:
 CC = gcc
 CFLAGS = -Wall -Werror
 
-all: shop
+all: laptops
 
-shop: main.o shop.o
-	$(CC) $(CFLAGS) -o shop main.o shop.o
+laptops: main.o shop.o
+	$(CC) $(CFLAGS) -o laptops main.o shop.o
 
 main.o: main.c shop.h
 	$(CC) $(CFLAGS) -c main.c
@@ -224,7 +299,8 @@ shop.o: shop.c shop.h
 	$(CC) $(CFLAGS) -c shop.c
 
 clean:
-	rm -f *.o shop
+	rm -f *.o laptops
+
 
 
 
