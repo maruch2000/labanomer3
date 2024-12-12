@@ -1,0 +1,240 @@
+main файл:
+#include "shop.h"
+
+int main() {
+    Product *products = NULL;
+    int count = load_products(&products, "shop.bin");
+    int choice;
+
+    do {
+        printf("\nМеню:\n");
+        printf("1. Вывести товары\n");
+        printf("2. Добавить товар\n");
+        printf("3. Удалить товар\n");
+        printf("4. Редактировать товар\n");
+        printf("5. Поиск товара\n");
+        printf("0. Выход\n");
+        printf("Введите номер: ");
+        scanf("%d", &choice);
+
+        switch (choice) {
+            case 1: print_products(products, count); break;
+            case 2: add_product(&products, &count); break;
+            case 3: delete_product(&products, &count); break;
+            case 4: edit_product(products, count); break;
+            case 5: search_products(products, count); break;
+            case 0: printf("Выход...\n"); break;
+            default: printf("Неверный выбор!\n");
+        }
+    } while (choice != 0);
+
+    save_products(products, count, "shop.bin");
+    free(products);
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+Заголовочный файл:
+#ifndef SHOP_H
+#define SHOP_H
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAX_NAME 50
+#define MAX_DESC 100
+#define MAX_GPU 50
+
+typedef struct {
+    char name[MAX_NAME];
+    float price;
+    char description[MAX_DESC];
+    char gpu[MAX_GPU];
+} Product;
+
+int load_products(Product **products, const char *filename);
+void save_products(Product *products, int count, const char *filename);
+void add_product(Product **products, int *count);
+void delete_product(Product **products, int *count);
+void edit_product(Product *products, int count);
+void search_products(Product *products, int count);
+void print_products(Product *products, int count);
+
+#endif
+
+
+
+
+Функции:
+#include "shop.h"
+
+int load_products(Product **products, const char *filename) {
+    FILE *file = fopen(filename, "rb");
+    if (file == NULL) return 0;
+
+    fseek(file, 0, SEEK_END);
+    long fileSize = ftell(file);
+    rewind(file);
+
+    int count = fileSize / sizeof(Product);
+    if (count <=0) {
+        fclose(file);
+        return 0;
+    }
+
+    *products = (Product *)malloc(count * sizeof(Product));
+    if (*products == NULL) {
+        fclose(file);
+        return 0;
+    }
+
+    fread(*products, sizeof(Product), count, file);
+    fclose(file);
+    return count;
+}
+
+void save_products(Product *products, int count, const char *filename) {
+    FILE *file = fopen(filename, "wb");
+    if (file != NULL) {
+        fwrite(products, sizeof(Product), count, file);
+        fclose(file);
+    }
+}
+
+
+void add_product(Product **products, int *count) {
+    Product *new_products = (Product *)realloc(*products, (*count + 1) * sizeof(Product));
+    if (new_products == NULL) {
+        fprintf(stderr, "Ошибка\n");
+        return;
+    }
+    *products = new_products;
+    printf("Введите название товара: ");
+    scanf(" %[^\n]", (*products)[*count].name);
+    printf("Введите цену: ");
+    scanf("%f", &(*products)[*count].price);
+    printf("Введите описание: ");
+    scanf(" %[^\n]", (*products)[*count].description);
+    (*count)++;
+}
+
+void delete_product(Product **products, int *count) {
+    if (*count == 0) {
+        printf("База данных пуста!\n");
+        return;
+    }
+    int index;
+    printf("Введите номер товара для удаления: ");
+    scanf("%d", &index);
+    if (index < 1 || index > *count) {
+        printf("Товар не найден\n");
+        return;
+    }
+    for (int i = index - 1; i < *count - 1; i++) {
+        (*products)[i] = (*products)[i + 1];
+    }
+    (*count)--;
+    *products = (Product*)realloc(*products, (*count) * sizeof(Product));
+}
+
+void edit_product(Product *products, int count) {
+    if (count == 0) {
+        printf("В базе данных ничего нет\n");
+        return;
+    }
+    int index;
+    printf("Введите номер товара для редактирования: ");
+    scanf("%d", &index);
+    if (index < 1 || index > count) {
+        printf("Товар не найден!\n");
+        return;
+    }
+    index--;
+    printf("Введите новое название товара: ");
+    scanf(" %[^\n]", products[index].name);
+    printf("Введите новую цену: ");
+    scanf("%f", &products[index].price);
+    printf("Введите новое описание: ");
+    scanf(" %[^\n]", products[index].description);
+}
+
+void search_products(Product *products, int count) {
+    if (count == 0) {
+        printf("База данных пуста!\n");
+        return;
+    }
+    char name_keyword[MAX_NAME];
+    float min_price;
+
+    printf(": ");
+    scanf(" %[^\n]", name_keyword);
+    printf("Введите минимальную цену: ");
+    scanf("%f", &min_price);
+
+    for (int i = 0; i < count; i++) {
+        if (strstr(products[i].name, name_keyword) != NULL && products[i].price >= min_price) {
+            printf("Товар %d:\n", i + 1);
+            printf("Название: %s\n", products[i].name);
+            printf("Цена: %.2f\n", products[i].price);
+            printf("Описание: %s\n\n", products[i].description);
+        }
+    }
+}
+
+void print_products(Product *products, int count) {
+    if (count == 0) {
+        printf("Ничего нет в базе данных\n");
+        return;
+    }
+    for (int i = 0; i < count; i++) {
+        printf("Товар %d:\n", i + 1);
+        printf("Название: %s\n", products[i].name);
+        printf("Цена: %.2f\n", products[i].price);
+        printf("Описание: %s\n\n", products[i].description);
+    }
+}
+
+
+
+
+
+Makefile:
+CC = gcc
+CFLAGS = -Wall -Werror
+
+all: shop
+
+shop: main.o shop.o
+	$(CC) $(CFLAGS) -o shop main.o shop.o
+
+main.o: main.c shop.h
+	$(CC) $(CFLAGS) -c main.c
+
+shop.o: shop.c shop.h
+	$(CC) $(CFLAGS) -c shop.c
+
+clean:
+	rm -f *.o shop
+
+
+
+
+
+
+
+
+
+
+
+
+
